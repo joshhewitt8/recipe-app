@@ -109,7 +109,7 @@ function fromDesignData(r) {
           name: g.name || '', order: g.order || 0,
           ingredients: g.ingredients?.length > 0
             ? g.ingredients.map((ing) => ({
-                name: ing.name || '', prep_note: '',
+                name: ing.name || '', prep_note: ing.prep_note || '',
                 amount: String(ing.amount || ''), unit: ing.unit || suggestUnit(ing.name || ''),
                 calories_per_100g: null, protein_per_100g: null, carbs_per_100g: null, fat_per_100g: null,
               }))
