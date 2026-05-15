@@ -12,6 +12,36 @@ export const UNIT_TO_GRAMS = {
   lb: 453.6,
 }
 
+// Count-based units: { unit → { ingredient keyword → grams per unit } }
+// 'default' is used when no ingredient keyword matches
+const CONTEXT_UNITS = {
+  clove:    { garlic: 4,   default: 4 },
+  cloves:   { garlic: 4,   default: 4 },
+  egg:      { default: 58 },
+  eggs:     { default: 58 },
+  can:      { tomato: 400, coconut: 400, bean: 400, chickpea: 400, lentil: 400, default: 400 },
+  tin:      { tomato: 400, coconut: 400, bean: 400, chickpea: 400, lentil: 400, default: 400 },
+  sprig:    { thyme: 1,    rosemary: 2, default: 2 },
+  bunch:    { coriander: 30, parsley: 30, 'spring onion': 80, default: 30 },
+  handful:  { default: 30 },
+  head:     { garlic: 50,  broccoli: 400, cauliflower: 600, default: 200 },
+  slice:    { bread: 35,   cheese: 20, default: 25 },
+  rasher:   { bacon: 25,   default: 25 },
+  sheet:    { gelatin: 2,  default: 2 },
+  stick:    { butter: 113, cinnamon: 3, default: 15 },
+  knob:     { butter: 15,  ginger: 10, default: 10 },
+  thumb:    { ginger: 15,  default: 15 },
+  fillet:   { salmon: 150, cod: 150, chicken: 150, default: 150 },
+  breast:   { chicken: 180, default: 180 },
+  thigh:    { chicken: 120, default: 120 },
+}
+
+export function isRecognisedUnit(unit) {
+  if (!unit) return false
+  const u = unit.toLowerCase().trim()
+  return u in UNIT_TO_GRAMS || u in CONTEXT_UNITS
+}
+
 // Density corrections (g/ml) for ingredients that differ meaningfully from water.
 // Applied on top of standard unit weights.
 const DENSITIES = {
@@ -96,7 +126,20 @@ function getDensity(ingredientName) {
 }
 
 export function unitToGrams(unit, ingredientName = '') {
-  const base = UNIT_TO_GRAMS[unit?.toLowerCase()?.trim()] ?? 1
+  const u = unit?.toLowerCase()?.trim() || ''
+  const name = ingredientName.toLowerCase()
+
+  // Count-based units — look up by ingredient keyword first
+  if (u in CONTEXT_UNITS) {
+    const map = CONTEXT_UNITS[u]
+    for (const keyword of Object.keys(map)) {
+      if (keyword !== 'default' && name.includes(keyword)) return map[keyword]
+    }
+    return map.default ?? 5
+  }
+
+  // Volume/weight units with density correction
+  const base = UNIT_TO_GRAMS[u] ?? 1
   return base * getDensity(ingredientName)
 }
 

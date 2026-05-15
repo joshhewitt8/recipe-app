@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import IngredientAutocomplete from '../components/IngredientAutocomplete'
 import { recipesApi } from '../api/recipes'
-import { suggestUnit, unitToGrams } from '../utils/units'
+import { suggestUnit, unitToGrams, isRecognisedUnit } from '../utils/units'
 
 const emptyIngredient = () => ({
   name: '',
@@ -208,7 +208,7 @@ export default function RecipeForm() {
               k === ii ? {
                 ...ing,
                 name: item.name,
-                unit: suggestUnit(item.name),
+                unit: isRecognisedUnit(ing.unit) ? ing.unit : suggestUnit(item.name),
                 calories_per_100g: item.calories,
                 protein_per_100g: item.protein,
                 carbs_per_100g: item.carbs,

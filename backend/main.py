@@ -295,6 +295,28 @@ UNIT_TO_GRAMS = {
     "oz": 28.35, "lb": 453.6,
 }
 
+CONTEXT_UNITS = {
+    "clove":   {"garlic": 4, "default": 4},
+    "cloves":  {"garlic": 4, "default": 4},
+    "egg":     {"default": 58},
+    "eggs":    {"default": 58},
+    "can":     {"tomato": 400, "coconut": 400, "bean": 400, "chickpea": 400, "default": 400},
+    "tin":     {"tomato": 400, "coconut": 400, "bean": 400, "chickpea": 400, "default": 400},
+    "sprig":   {"thyme": 1, "rosemary": 2, "default": 2},
+    "bunch":   {"coriander": 30, "parsley": 30, "default": 30},
+    "handful": {"default": 30},
+    "head":    {"garlic": 50, "broccoli": 400, "cauliflower": 600, "default": 200},
+    "slice":   {"bread": 35, "cheese": 20, "default": 25},
+    "rasher":  {"default": 25},
+    "sheet":   {"gelatin": 2, "default": 2},
+    "stick":   {"butter": 113, "cinnamon": 3, "default": 15},
+    "knob":    {"butter": 15, "ginger": 10, "default": 10},
+    "thumb":   {"ginger": 15, "default": 15},
+    "fillet":  {"default": 150},
+    "breast":  {"chicken": 180, "default": 180},
+    "thigh":   {"chicken": 120, "default": 120},
+}
+
 DENSITIES = {
     "soy sauce": 1.15, "tamari": 1.15, "fish sauce": 1.07,
     "oyster sauce": 1.28, "worcestershire": 1.07, "hoisin": 1.32,
@@ -316,12 +338,22 @@ DENSITIES = {
 
 
 def _unit_to_grams(unit: str, ingredient_name: str = "") -> float:
-    base = UNIT_TO_GRAMS.get((unit or "").lower().strip(), 1.0)
-    if ingredient_name:
-        name = ingredient_name.lower()
-        for key, density in DENSITIES.items():
-            if key in name:
-                return base * density
+    u = (unit or "").lower().strip()
+    name = (ingredient_name or "").lower()
+
+    # Count-based units
+    if u in CONTEXT_UNITS:
+        mapping = CONTEXT_UNITS[u]
+        for keyword, grams in mapping.items():
+            if keyword != "default" and keyword in name:
+                return float(grams)
+        return float(mapping.get("default", 5))
+
+    # Volume/weight with density correction
+    base = UNIT_TO_GRAMS.get(u, 1.0)
+    for key, density in DENSITIES.items():
+        if key in name:
+            return base * density
     return base
 
 
