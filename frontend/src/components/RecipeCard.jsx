@@ -13,18 +13,17 @@ export default function RecipeCard({ recipe }) {
 
   return (
     <Link to={`/recipes/${recipe.id}`} className="recipe-card">
-      <h3 className="recipe-card-title">{recipe.title}</h3>
-      {recipe.description && (
-        <p className="recipe-card-desc">{recipe.description}</p>
-      )}
-      <div className="recipe-card-meta">
+      <div className="recipe-card-accent" />
+      <div className="recipe-card-body">
+        <h3 className="recipe-card-title">{recipe.title}</h3>
+        {recipe.description && (
+          <p className="recipe-card-desc">{recipe.description}</p>
+        )}
+      </div>
+      <div className="recipe-card-footer">
         <span className="meta-pill">{recipe.servings} servings</span>
-        {totalTime > 0 && (
-          <span className="meta-pill">{formatTime(totalTime)}</span>
-        )}
-        {recipe.prep_time && (
-          <span className="meta-pill muted">Prep {formatTime(recipe.prep_time)}</span>
-        )}
+        {totalTime > 0 && <span className="meta-pill">{formatTime(totalTime)}</span>}
+        {recipe.prep_time && <span className="meta-pill neutral">Prep {formatTime(recipe.prep_time)}</span>}
       </div>
     </Link>
   )

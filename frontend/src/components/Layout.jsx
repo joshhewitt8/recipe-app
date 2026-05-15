@@ -11,8 +11,8 @@ export default function Layout({ children }) {
             </svg>
             Recipes
           </Link>
-          <Link to="/new" className="btn btn-primary">
-            New Recipe
+          <Link to="/new" className="btn btn-primary" style={{ fontSize: 13 }}>
+            + New Recipe
           </Link>
         </div>
       </header>

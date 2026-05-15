@@ -61,6 +61,10 @@ class Ingredient(Base):
     name = Column(String(255), nullable=False)
     amount = Column(Float, nullable=False)
     unit = Column(String(50))
+    calories_per_100g = Column(Float)
+    protein_per_100g = Column(Float)
+    carbs_per_100g = Column(Float)
+    fat_per_100g = Column(Float)
 
     group = relationship("IngredientGroup", back_populates="ingredients")
 

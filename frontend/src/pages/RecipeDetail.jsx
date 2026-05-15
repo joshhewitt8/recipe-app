@@ -27,21 +27,14 @@ export default function RecipeDetail() {
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    recipesApi
-      .get(id)
-      .then((data) => {
-        setRecipe(data)
-        setServings(data.servings)
-      })
+    recipesApi.get(id)
+      .then((data) => { setRecipe(data); setServings(data.servings) })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [id])
 
   const handleDelete = async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true)
-      return
-    }
+    if (!confirmDelete) { setConfirmDelete(true); return }
     setDeleting(true)
     try {
       await recipesApi.delete(id)
@@ -59,55 +52,44 @@ export default function RecipeDetail() {
   const scaleFactor = servings / recipe.servings
   const totalTime = (recipe.prep_time || 0) + (recipe.cook_time || 0)
   const hasMacros = recipe.macros &&
-    [recipe.macros.calories, recipe.macros.protein, recipe.macros.carbs, recipe.macros.fat]
-      .some((v) => v != null)
+    [recipe.macros.calories, recipe.macros.protein, recipe.macros.carbs, recipe.macros.fat].some(v => v != null && v > 0)
 
   return (
     <Layout>
-      <div className="container">
-        {/* Top bar */}
-        <div className="detail-topbar">
-          <Link to="/" className="back-link">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M19 12H5M5 12l7 7M5 12l7-7"/>
-            </svg>
-            All Recipes
-          </Link>
-          <div className="detail-actions">
-            <Link to={`/recipes/${id}/edit`} className="btn btn-secondary">Edit</Link>
-            {confirmDelete ? (
-              <>
-                <button
-                  onClick={handleDelete}
-                  className="btn btn-danger-solid"
-                  disabled={deleting}
-                >
-                  {deleting ? 'Deleting…' : 'Confirm delete'}
-                </button>
-                <button onClick={() => setConfirmDelete(false)} className="btn btn-ghost">
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <button onClick={handleDelete} className="btn btn-danger">
-                Delete
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="recipe-detail">
-          {/* Title */}
-          <div className="detail-title-block">
-            <h1 className="detail-title">{recipe.title}</h1>
-            {recipe.description && (
-              <p className="detail-description">{recipe.description}</p>
-            )}
+      {/* Dark hero */}
+      <div className="detail-hero">
+        <div className="detail-hero-inner">
+          <div className="detail-topbar">
+            <Link to="/" className="back-link" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M19 12H5M5 12l7 7M5 12l7-7"/>
+              </svg>
+              All Recipes
+            </Link>
+            <div className="detail-actions">
+              <Link to={`/recipes/${id}/edit`} className="btn btn-ghost">Edit</Link>
+              {confirmDelete ? (
+                <>
+                  <button onClick={handleDelete} className="btn btn-danger-solid" disabled={deleting}>
+                    {deleting ? 'Deleting…' : 'Confirm delete'}
+                  </button>
+                  <button onClick={() => setConfirmDelete(false)} className="btn btn-ghost">Cancel</button>
+                </>
+              ) : (
+                <button onClick={handleDelete} className="btn btn-danger">Delete</button>
+              )}
+            </div>
           </div>
 
-          {/* Meta bar */}
-          {(recipe.prep_time || recipe.cook_time) && (
-            <div className="detail-meta-bar">
+          <h1 className="detail-title">{recipe.title}</h1>
+          {recipe.description && <p className="detail-description">{recipe.description}</p>}
+
+          {(recipe.prep_time || recipe.cook_time || recipe.servings) && (
+            <div className="detail-meta-strip">
+              <div className="meta-stat">
+                <span className="meta-stat-label">Serves</span>
+                <span className="meta-stat-value">{recipe.servings}</span>
+              </div>
               {recipe.prep_time && (
                 <div className="meta-stat">
                   <span className="meta-stat-label">Prep</span>
@@ -128,42 +110,12 @@ export default function RecipeDetail() {
               )}
             </div>
           )}
+        </div>
+      </div>
 
-          {/* Servings scaler */}
-          <div className="servings-scaler">
-            <span className="servings-label">Servings</span>
-            <div className="servings-controls">
-              <button
-                className="servings-btn"
-                onClick={() => setServings((s) => Math.max(1, s - 1))}
-                disabled={servings <= 1}
-                aria-label="Decrease servings"
-              >
-                −
-              </button>
-              <input
-                type="number"
-                className="servings-input"
-                value={servings}
-                min="1"
-                onChange={(e) =>
-                  setServings(Math.max(1, parseInt(e.target.value) || 1))
-                }
-              />
-              <button
-                className="servings-btn"
-                onClick={() => setServings((s) => s + 1)}
-                aria-label="Increase servings"
-              >
-                +
-              </button>
-            </div>
-            {scaleFactor !== 1 && (
-              <span className="scale-badge">
-                scaled from {recipe.servings}
-              </span>
-            )}
-          </div>
+      {/* Two-column body */}
+      <div className="detail-body">
+        <div className="detail-main">
 
           {/* Ingredients */}
           {recipe.ingredient_groups.length > 0 && (
@@ -176,8 +128,7 @@ export default function RecipeDetail() {
                     {group.ingredients.map((ing) => (
                       <li key={ing.id} className="ing-item">
                         <span className="ing-amount">
-                          {formatAmount(ing.amount * scaleFactor)}
-                          {ing.unit ? ` ${ing.unit}` : ''}
+                          {formatAmount(ing.amount * scaleFactor)}{ing.unit ? ` ${ing.unit}` : ''}
                         </span>
                         <span className="ing-name">{ing.name}</span>
                       </li>
@@ -206,45 +157,63 @@ export default function RecipeDetail() {
             </section>
           )}
 
-          {/* Macros */}
-          {hasMacros && (
-            <section className="detail-section">
-              <h2 className="section-title">Nutrition per serving</h2>
-              <div className="macros-row">
-                {recipe.macros.calories != null && (
-                  <div className="macro-card">
-                    <span className="macro-val">{Math.round(recipe.macros.calories)}</span>
-                    <span className="macro-lbl">Calories</span>
-                  </div>
-                )}
-                {recipe.macros.protein != null && (
-                  <div className="macro-card">
-                    <span className="macro-val">{recipe.macros.protein}g</span>
-                    <span className="macro-lbl">Protein</span>
-                  </div>
-                )}
-                {recipe.macros.carbs != null && (
-                  <div className="macro-card">
-                    <span className="macro-val">{recipe.macros.carbs}g</span>
-                    <span className="macro-lbl">Carbs</span>
-                  </div>
-                )}
-                {recipe.macros.fat != null && (
-                  <div className="macro-card">
-                    <span className="macro-val">{recipe.macros.fat}g</span>
-                    <span className="macro-lbl">Fat</span>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
           {/* Notes */}
           {recipe.notes && (
             <section className="detail-section">
               <h2 className="section-title">Notes</h2>
               <div className="notes-block">{recipe.notes}</div>
             </section>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div className="detail-sidebar">
+          {/* Servings scaler */}
+          <div className="servings-scaler">
+            <div className="servings-scaler-title">Adjust Servings</div>
+            <div className="servings-controls">
+              <button className="servings-btn" onClick={() => setServings(s => Math.max(1, s - 1))}
+                disabled={servings <= 1}>−</button>
+              <input type="number" className="servings-input" value={servings} min="1"
+                onChange={(e) => setServings(Math.max(1, parseInt(e.target.value) || 1))} />
+              <button className="servings-btn" onClick={() => setServings(s => s + 1)}>+</button>
+            </div>
+            {scaleFactor !== 1 && (
+              <p className="scale-note">Scaled from {recipe.servings} servings</p>
+            )}
+          </div>
+
+          {/* Macros */}
+          {hasMacros && (
+            <div className="macros-card">
+              <div className="macros-card-header">Nutrition per serving</div>
+              <div className="macros-grid">
+                {recipe.macros.calories > 0 && (
+                  <div className="macro-cell">
+                    <span className="macro-val">{Math.round(recipe.macros.calories)}</span>
+                    <span className="macro-lbl">Calories</span>
+                  </div>
+                )}
+                {recipe.macros.protein > 0 && (
+                  <div className="macro-cell">
+                    <span className="macro-val">{recipe.macros.protein}g</span>
+                    <span className="macro-lbl">Protein</span>
+                  </div>
+                )}
+                {recipe.macros.carbs > 0 && (
+                  <div className="macro-cell">
+                    <span className="macro-val">{recipe.macros.carbs}g</span>
+                    <span className="macro-lbl">Carbs</span>
+                  </div>
+                )}
+                {recipe.macros.fat > 0 && (
+                  <div className="macro-cell">
+                    <span className="macro-val">{recipe.macros.fat}g</span>
+                    <span className="macro-lbl">Fat</span>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>

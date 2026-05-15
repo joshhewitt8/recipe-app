@@ -1,8 +1,10 @@
+import os
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+import httpx
 
 import models
 import schemas
@@ -20,6 +22,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+USDA_API_KEY = os.getenv("USDA_API_KEY", "")
+USDA_BASE = "https://api.nal.usda.gov/fdc/v1"
+
+
+# ── Ingredient search ──────────────────────────────────────────────────────────
+
+@app.get("/api/ingredients/search")
+async def search_ingredients(q: str = Query(..., min_length=2)):
+    """Search USDA FoodData Central and return matching ingredients with macros."""
+    if not USDA_API_KEY:
+        raise HTTPException(status_code=500, detail="USDA API key not configured")
+
+    async with httpx.AsyncClient(timeout=8) as client:
+        resp = await client.get(
+            f"{USDA_BASE}/foods/search",
+            params={
+                "api_key": USDA_API_KEY,
+                "query": q,
+                "dataType": "SR Legacy,Foundation",
+                "pageSize": 12,
+            },
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="USDA API error")
+
+    data = resp.json()
+    results = []
+
+    for food in data.get("foods", []):
+        nutrients = {n["nutrientName"]: n.get("value", 0) for n in food.get("foodNutrients", [])}
+        results.append({
+            "fdcId": food["fdcId"],
+            "name": food["description"].title(),
+            "calories": round(nutrients.get("Energy", 0), 1),
+            "protein": round(nutrients.get("Protein", 0), 1),
+            "carbs": round(nutrients.get("Carbohydrate, by difference", 0), 1),
+            "fat": round(nutrients.get("Total lipid (fat)", 0), 1),
+        })
+
+    return results
+
+
+# ── Recipes ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/recipes", response_model=List[schemas.RecipeSummaryOut])
 def list_recipes(
@@ -59,6 +105,10 @@ def create_recipe(recipe: schemas.RecipeCreate, db: Session = Depends(get_db)):
                 name=ing.name,
                 amount=ing.amount,
                 unit=ing.unit,
+                calories_per_100g=ing.calories_per_100g,
+                protein_per_100g=ing.protein_per_100g,
+                carbs_per_100g=ing.carbs_per_100g,
+                fat_per_100g=ing.fat_per_100g,
             ))
 
     for step in recipe.method_steps:
@@ -69,14 +119,14 @@ def create_recipe(recipe: schemas.RecipeCreate, db: Session = Depends(get_db)):
             description=step.description,
         ))
 
-    if recipe.macros:
-        db.add(models.Macros(
-            recipe_id=db_recipe.id,
-            calories=recipe.macros.calories,
-            protein=recipe.macros.protein,
-            carbs=recipe.macros.carbs,
-            fat=recipe.macros.fat,
-        ))
+    macros = _calculate_macros(recipe)
+    db.add(models.Macros(
+        recipe_id=db_recipe.id,
+        calories=macros["calories"],
+        protein=macros["protein"],
+        carbs=macros["carbs"],
+        fat=macros["fat"],
+    ))
 
     db.commit()
     db.refresh(db_recipe)
@@ -131,6 +181,10 @@ def update_recipe(
                 name=ing.name,
                 amount=ing.amount,
                 unit=ing.unit,
+                calories_per_100g=ing.calories_per_100g,
+                protein_per_100g=ing.protein_per_100g,
+                carbs_per_100g=ing.carbs_per_100g,
+                fat_per_100g=ing.fat_per_100g,
             ))
 
     for step in recipe.method_steps:
@@ -141,14 +195,14 @@ def update_recipe(
             description=step.description,
         ))
 
-    if recipe.macros:
-        db.add(models.Macros(
-            recipe_id=db_recipe.id,
-            calories=recipe.macros.calories,
-            protein=recipe.macros.protein,
-            carbs=recipe.macros.carbs,
-            fat=recipe.macros.fat,
-        ))
+    macros = _calculate_macros(recipe)
+    db.add(models.Macros(
+        recipe_id=db_recipe.id,
+        calories=macros["calories"],
+        protein=macros["protein"],
+        carbs=macros["carbs"],
+        fat=macros["fat"],
+    ))
 
     db.commit()
     db.refresh(db_recipe)
@@ -162,3 +216,22 @@ def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Recipe not found")
     db.delete(db_recipe)
     db.commit()
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _calculate_macros(recipe: schemas.RecipeCreate) -> dict:
+    """Sum macros across all ingredients (assuming amounts are in grams) and divide by servings."""
+    totals = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}
+    servings = max(recipe.servings or 1, 1)
+
+    for group in recipe.ingredient_groups:
+        for ing in group.ingredients:
+            if ing.amount and ing.calories_per_100g is not None:
+                factor = ing.amount / 100
+                totals["calories"] += (ing.calories_per_100g or 0) * factor
+                totals["protein"] += (ing.protein_per_100g or 0) * factor
+                totals["carbs"] += (ing.carbs_per_100g or 0) * factor
+                totals["fat"] += (ing.fat_per_100g or 0) * factor
+
+    return {k: round(v / servings, 1) for k, v in totals.items()}

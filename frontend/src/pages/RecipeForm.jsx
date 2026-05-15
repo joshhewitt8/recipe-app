@@ -1,9 +1,18 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Layout from '../components/Layout'
+import IngredientAutocomplete from '../components/IngredientAutocomplete'
 import { recipesApi } from '../api/recipes'
 
-const emptyIngredient = () => ({ name: '', amount: '', unit: '' })
+const emptyIngredient = () => ({
+  name: '',
+  amount: '',
+  unit: 'g',
+  calories_per_100g: null,
+  protein_per_100g: null,
+  carbs_per_100g: null,
+  fat_per_100g: null,
+})
 const emptyGroup = () => ({ name: '', order: 0, ingredients: [emptyIngredient()] })
 const emptyStep = () => ({ step_number: 1, title: '', description: '' })
 
@@ -16,11 +25,9 @@ const defaultForm = () => ({
   notes: '',
   ingredient_groups: [emptyGroup()],
   method_steps: [emptyStep()],
-  macros: { calories: '', protein: '', carbs: '', fat: '' },
 })
 
 function toApiPayload(form) {
-  const hasMacros = Object.values(form.macros).some((v) => v !== '')
   return {
     title: form.title.trim(),
     description: form.description.trim() || null,
@@ -39,6 +46,10 @@ function toApiPayload(form) {
             name: ing.name.trim(),
             amount: parseFloat(ing.amount) || 0,
             unit: ing.unit.trim() || null,
+            calories_per_100g: ing.calories_per_100g,
+            protein_per_100g: ing.protein_per_100g,
+            carbs_per_100g: ing.carbs_per_100g,
+            fat_per_100g: ing.fat_per_100g,
           })),
       })),
     method_steps: form.method_steps
@@ -48,14 +59,7 @@ function toApiPayload(form) {
         title: s.title.trim() || null,
         description: s.description.trim(),
       })),
-    macros: hasMacros
-      ? {
-          calories: form.macros.calories !== '' ? parseFloat(form.macros.calories) : null,
-          protein: form.macros.protein !== '' ? parseFloat(form.macros.protein) : null,
-          carbs: form.macros.carbs !== '' ? parseFloat(form.macros.carbs) : null,
-          fat: form.macros.fat !== '' ? parseFloat(form.macros.fat) : null,
-        }
-      : null,
+    macros: null, // calculated server-side from ingredients
   }
 }
 
@@ -77,7 +81,11 @@ function fromApiData(r) {
                 ? g.ingredients.map((ing) => ({
                     name: ing.name,
                     amount: String(ing.amount),
-                    unit: ing.unit || '',
+                    unit: ing.unit || 'g',
+                    calories_per_100g: ing.calories_per_100g,
+                    protein_per_100g: ing.protein_per_100g,
+                    carbs_per_100g: ing.carbs_per_100g,
+                    fat_per_100g: ing.fat_per_100g,
                   }))
                 : [emptyIngredient()],
           }))
@@ -90,14 +98,29 @@ function fromApiData(r) {
             description: s.description,
           }))
         : [emptyStep()],
-    macros: r.macros
-      ? {
-          calories: r.macros.calories ?? '',
-          protein: r.macros.protein ?? '',
-          carbs: r.macros.carbs ?? '',
-          fat: r.macros.fat ?? '',
-        }
-      : { calories: '', protein: '', carbs: '', fat: '' },
+  }
+}
+
+function calcLiveMacros(form) {
+  const servings = Math.max(parseInt(form.servings) || 1, 1)
+  let cal = 0, pro = 0, carb = 0, fat = 0
+  for (const g of form.ingredient_groups) {
+    for (const ing of g.ingredients) {
+      const amt = parseFloat(ing.amount)
+      if (!amt || ing.calories_per_100g == null) continue
+      const f = amt / 100
+      cal += (ing.calories_per_100g || 0) * f
+      pro += (ing.protein_per_100g || 0) * f
+      carb += (ing.carbs_per_100g || 0) * f
+      fat += (ing.fat_per_100g || 0) * f
+    }
+  }
+  if (cal + pro + carb + fat === 0) return null
+  return {
+    calories: Math.round(cal / servings),
+    protein: Math.round(pro / servings * 10) / 10,
+    carbs: Math.round(carb / servings * 10) / 10,
+    fat: Math.round(fat / servings * 10) / 10,
   }
 }
 
@@ -113,34 +136,24 @@ export default function RecipeForm() {
 
   useEffect(() => {
     if (!isEdit) return
-    recipesApi
-      .get(id)
+    recipesApi.get(id)
       .then((data) => setForm(fromApiData(data)))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [id, isEdit])
 
   const setField = (field, value) => setForm((f) => ({ ...f, [field]: value }))
-  const setMacro = (field, value) =>
-    setForm((f) => ({ ...f, macros: { ...f.macros, [field]: value } }))
 
-  // Groups
   const addGroup = () =>
     setForm((f) => ({ ...f, ingredient_groups: [...f.ingredient_groups, emptyGroup()] }))
   const removeGroup = (i) =>
-    setForm((f) => ({
-      ...f,
-      ingredient_groups: f.ingredient_groups.filter((_, j) => j !== i),
-    }))
+    setForm((f) => ({ ...f, ingredient_groups: f.ingredient_groups.filter((_, j) => j !== i) }))
   const setGroupName = (i, v) =>
     setForm((f) => ({
       ...f,
-      ingredient_groups: f.ingredient_groups.map((g, j) =>
-        j === i ? { ...g, name: v } : g
-      ),
+      ingredient_groups: f.ingredient_groups.map((g, j) => j === i ? { ...g, name: v } : g),
     }))
 
-  // Ingredients
   const addIngredient = (gi) =>
     setForm((f) => ({
       ...f,
@@ -152,9 +165,7 @@ export default function RecipeForm() {
     setForm((f) => ({
       ...f,
       ingredient_groups: f.ingredient_groups.map((g, j) =>
-        j === gi
-          ? { ...g, ingredients: g.ingredients.filter((_, k) => k !== ii) }
-          : g
+        j === gi ? { ...g, ingredients: g.ingredients.filter((_, k) => k !== ii) } : g
       ),
     }))
   const setIngField = (gi, ii, field, value) =>
@@ -162,53 +173,59 @@ export default function RecipeForm() {
       ...f,
       ingredient_groups: f.ingredient_groups.map((g, j) =>
         j === gi
+          ? { ...g, ingredients: g.ingredients.map((ing, k) => k === ii ? { ...ing, [field]: value } : ing) }
+          : g
+      ),
+    }))
+  const selectIngredient = (gi, ii, item) =>
+    setForm((f) => ({
+      ...f,
+      ingredient_groups: f.ingredient_groups.map((g, j) =>
+        j === gi
           ? {
               ...g,
               ingredients: g.ingredients.map((ing, k) =>
-                k === ii ? { ...ing, [field]: value } : ing
+                k === ii
+                  ? {
+                      ...ing,
+                      name: item.name,
+                      unit: 'g',
+                      calories_per_100g: item.calories,
+                      protein_per_100g: item.protein,
+                      carbs_per_100g: item.carbs,
+                      fat_per_100g: item.fat,
+                    }
+                  : ing
               ),
             }
           : g
       ),
     }))
 
-  // Steps
   const addStep = () =>
     setForm((f) => ({
       ...f,
-      method_steps: [
-        ...f.method_steps,
-        { step_number: f.method_steps.length + 1, title: '', description: '' },
-      ],
+      method_steps: [...f.method_steps, { step_number: f.method_steps.length + 1, title: '', description: '' }],
     }))
   const removeStep = (i) =>
     setForm((f) => ({
       ...f,
-      method_steps: f.method_steps
-        .filter((_, j) => j !== i)
-        .map((s, j) => ({ ...s, step_number: j + 1 })),
+      method_steps: f.method_steps.filter((_, j) => j !== i).map((s, j) => ({ ...s, step_number: j + 1 })),
     }))
   const setStepField = (i, field, value) =>
     setForm((f) => ({
       ...f,
-      method_steps: f.method_steps.map((s, j) =>
-        j === i ? { ...s, [field]: value } : s
-      ),
+      method_steps: f.method_steps.map((s, j) => j === i ? { ...s, [field]: value } : s),
     }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.title.trim()) {
-      setError('Title is required.')
-      return
-    }
+    if (!form.title.trim()) { setError('Title is required.'); return }
     setSubmitting(true)
     setError(null)
     try {
       const payload = toApiPayload(form)
-      const result = isEdit
-        ? await recipesApi.update(id, payload)
-        : await recipesApi.create(payload)
+      const result = isEdit ? await recipesApi.update(id, payload) : await recipesApi.create(payload)
       navigate(`/recipes/${result.id}`)
     } catch (err) {
       setError(err.message)
@@ -216,15 +233,10 @@ export default function RecipeForm() {
     }
   }
 
+  const liveMacros = calcLiveMacros(form)
+
   if (loading)
-    return (
-      <Layout>
-        <div className="state-box">
-          <div className="spinner" />
-          <p>Loading…</p>
-        </div>
-      </Layout>
-    )
+    return <Layout><div className="state-box"><div className="spinner" /><p>Loading…</p></div></Layout>
 
   return (
     <Layout>
@@ -242,65 +254,37 @@ export default function RecipeForm() {
         {error && <div className="alert alert-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="recipe-form">
+
           {/* Basic info */}
           <div className="form-card">
             <h2 className="form-card-title">Basic Information</h2>
-
             <div className="field">
               <label className="field-label">Title *</label>
-              <input
-                className="field-input"
-                type="text"
-                value={form.title}
+              <input className="field-input" type="text" value={form.title}
                 onChange={(e) => setField('title', e.target.value)}
-                placeholder="e.g. Chicken Tikka Masala"
-                required
-              />
+                placeholder="e.g. Chicken Tikka Masala" required />
             </div>
-
             <div className="field">
               <label className="field-label">Description</label>
-              <textarea
-                className="field-input"
-                rows={3}
-                value={form.description}
+              <textarea className="field-input" rows={3} value={form.description}
                 onChange={(e) => setField('description', e.target.value)}
-                placeholder="A brief description of the dish"
-              />
+                placeholder="A brief description of the dish" />
             </div>
-
             <div className="field-row">
               <div className="field">
                 <label className="field-label">Servings</label>
-                <input
-                  className="field-input"
-                  type="number"
-                  min="1"
-                  value={form.servings}
-                  onChange={(e) => setField('servings', e.target.value)}
-                />
+                <input className="field-input" type="number" min="1" value={form.servings}
+                  onChange={(e) => setField('servings', e.target.value)} />
               </div>
               <div className="field">
                 <label className="field-label">Prep time (min)</label>
-                <input
-                  className="field-input"
-                  type="number"
-                  min="0"
-                  value={form.prep_time}
-                  onChange={(e) => setField('prep_time', e.target.value)}
-                  placeholder="e.g. 20"
-                />
+                <input className="field-input" type="number" min="0" value={form.prep_time}
+                  onChange={(e) => setField('prep_time', e.target.value)} placeholder="e.g. 20" />
               </div>
               <div className="field">
                 <label className="field-label">Cook time (min)</label>
-                <input
-                  className="field-input"
-                  type="number"
-                  min="0"
-                  value={form.cook_time}
-                  onChange={(e) => setField('cook_time', e.target.value)}
-                  placeholder="e.g. 45"
-                />
+                <input className="field-input" type="number" min="0" value={form.cook_time}
+                  onChange={(e) => setField('cook_time', e.target.value)} placeholder="e.g. 45" />
               </div>
             </div>
           </div>
@@ -309,27 +293,17 @@ export default function RecipeForm() {
           <div className="form-card">
             <div className="form-card-header">
               <h2 className="form-card-title">Ingredients</h2>
-              <button type="button" onClick={addGroup} className="btn btn-secondary btn-sm">
-                + Add Group
-              </button>
+              <button type="button" onClick={addGroup} className="btn btn-secondary btn-sm">+ Add Group</button>
             </div>
 
             {form.ingredient_groups.map((group, gi) => (
               <div key={gi} className="ing-group-form">
                 <div className="ing-group-header">
-                  <input
-                    className="ing-group-name-input"
-                    type="text"
-                    value={group.name}
+                  <input className="ing-group-name-input" type="text" value={group.name}
                     onChange={(e) => setGroupName(gi, e.target.value)}
-                    placeholder="Group name (e.g. Marinade, Main, Sauce)"
-                  />
+                    placeholder="Group name (e.g. Marinade, Main, Sauce)" />
                   {form.ingredient_groups.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeGroup(gi)}
-                      className="remove-link"
-                    >
+                    <button type="button" onClick={() => removeGroup(gi)} className="remove-link">
                       Remove group
                     </button>
                   )}
@@ -340,41 +314,34 @@ export default function RecipeForm() {
                     <span className="ing-col-amount">Amount</span>
                     <span className="ing-col-unit">Unit</span>
                     <span className="ing-col-name">Ingredient</span>
+                    <span className="ing-col-macros">Macros / 100g</span>
                   </div>
                   {group.ingredients.map((ing, ii) => (
                     <div key={ii} className="ing-row">
-                      <input
-                        className="ing-input ing-col-amount"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={ing.amount}
+                      <input className="ing-input ing-col-amount" type="number"
+                        step="any" min="0" value={ing.amount}
                         onChange={(e) => setIngField(gi, ii, 'amount', e.target.value)}
-                        placeholder="0"
-                      />
-                      <input
-                        className="ing-input ing-col-unit"
-                        type="text"
-                        value={ing.unit}
+                        placeholder="0" />
+                      <input className="ing-input ing-col-unit" type="text" value={ing.unit}
                         onChange={(e) => setIngField(gi, ii, 'unit', e.target.value)}
-                        placeholder="g, ml, tsp…"
-                      />
-                      <input
-                        className="ing-input ing-col-name"
-                        type="text"
+                        placeholder="g" />
+                      <IngredientAutocomplete
                         value={ing.name}
-                        onChange={(e) => setIngField(gi, ii, 'name', e.target.value)}
-                        placeholder="Ingredient name"
+                        onChange={(v) => setIngField(gi, ii, 'name', v)}
+                        onSelect={(item) => selectIngredient(gi, ii, item)}
                       />
-                      <button
-                        type="button"
-                        className="row-remove-btn"
+                      <div className="ing-col-macros">
+                        {ing.calories_per_100g != null ? (
+                          <span className="macro-badge">
+                            {ing.calories_per_100g} kcal · {ing.protein_per_100g}g P
+                          </span>
+                        ) : (
+                          <span className="macro-badge-empty">select from search</span>
+                        )}
+                      </div>
+                      <button type="button" className="row-remove-btn"
                         onClick={() => removeIngredient(gi, ii)}
-                        disabled={group.ingredients.length === 1}
-                        aria-label="Remove ingredient"
-                      >
-                        ×
-                      </button>
+                        disabled={group.ingredients.length === 1}>×</button>
                     </div>
                   ))}
                 </div>
@@ -383,96 +350,56 @@ export default function RecipeForm() {
                 </button>
               </div>
             ))}
+
+            {/* Live macro preview */}
+            {liveMacros && (
+              <div className="live-macros-preview">
+                <span className="live-macros-label">Estimated per serving</span>
+                <div className="live-macros-values">
+                  <span><strong>{liveMacros.calories}</strong> kcal</span>
+                  <span><strong>{liveMacros.protein}g</strong> protein</span>
+                  <span><strong>{liveMacros.carbs}g</strong> carbs</span>
+                  <span><strong>{liveMacros.fat}g</strong> fat</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Method */}
           <div className="form-card">
             <div className="form-card-header">
               <h2 className="form-card-title">Method</h2>
-              <button type="button" onClick={addStep} className="btn btn-secondary btn-sm">
-                + Add Step
-              </button>
+              <button type="button" onClick={addStep} className="btn btn-secondary btn-sm">+ Add Step</button>
             </div>
-
             {form.method_steps.map((step, i) => (
               <div key={i} className="step-form-row">
                 <div className="step-form-num">{i + 1}</div>
                 <div className="step-form-inputs">
-                  <input
-                    className="field-input step-title-input"
-                    type="text"
-                    value={step.title}
+                  <input className="field-input step-title-input" type="text" value={step.title}
                     onChange={(e) => setStepField(i, 'title', e.target.value)}
-                    placeholder="Step title (optional)"
-                  />
-                  <textarea
-                    className="field-input"
-                    rows={3}
-                    value={step.description}
+                    placeholder="Step title (optional)" />
+                  <textarea className="field-input" rows={3} value={step.description}
                     onChange={(e) => setStepField(i, 'description', e.target.value)}
-                    placeholder="Describe this step…"
-                  />
+                    placeholder="Describe this step…" />
                 </div>
-                <button
-                  type="button"
-                  className="row-remove-btn"
-                  onClick={() => removeStep(i)}
-                  disabled={form.method_steps.length === 1}
-                  aria-label="Remove step"
-                >
-                  ×
-                </button>
+                <button type="button" className="row-remove-btn"
+                  onClick={() => removeStep(i)} disabled={form.method_steps.length === 1}>×</button>
               </div>
             ))}
-          </div>
-
-          {/* Macros */}
-          <div className="form-card">
-            <h2 className="form-card-title">Nutrition per Serving <span className="optional-tag">optional</span></h2>
-            <div className="field-row">
-              {[
-                { key: 'calories', label: 'Calories' },
-                { key: 'protein', label: 'Protein (g)' },
-                { key: 'carbs', label: 'Carbs (g)' },
-                { key: 'fat', label: 'Fat (g)' },
-              ].map(({ key, label }) => (
-                <div key={key} className="field">
-                  <label className="field-label">{label}</label>
-                  <input
-                    className="field-input"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={form.macros[key]}
-                    onChange={(e) => setMacro(key, e.target.value)}
-                    placeholder="—"
-                  />
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Notes */}
           <div className="form-card">
             <h2 className="form-card-title">Notes <span className="optional-tag">optional</span></h2>
             <div className="field">
-              <textarea
-                className="field-input"
-                rows={4}
-                value={form.notes}
+              <textarea className="field-input" rows={4} value={form.notes}
                 onChange={(e) => setField('notes', e.target.value)}
-                placeholder="Tips, variations, storage instructions…"
-              />
+                placeholder="Tips, variations, storage instructions…" />
             </div>
           </div>
 
           <div className="form-footer">
-            <Link
-              to={isEdit ? `/recipes/${id}` : '/'}
-              className="btn btn-ghost"
-            >
-              Cancel
-            </Link>
+            <Link to={isEdit ? `/recipes/${id}` : '/'} className="btn btn-ghost">Cancel</Link>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
               {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Recipe'}
             </button>
