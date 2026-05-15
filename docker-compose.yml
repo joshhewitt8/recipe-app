@@ -6,7 +6,9 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_URL=sqlite:////app/data/recipes.db
-      - USDA_API_KEY=nY3w1sGS91sASgkSrzPehzlRmJhJ0FnfxRc6IQYT
+      - USDA_API_KEY=${USDA_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
 
   frontend:
     build: ./frontend
