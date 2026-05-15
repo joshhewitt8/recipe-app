@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Layout from '../components/Layout'
+import PhotoPicker from '../components/PhotoPicker'
 import { recipesApi } from '../api/recipes'
 
 function formatTime(mins) {
@@ -25,6 +26,7 @@ export default function RecipeDetail() {
   const [servings, setServings] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showPhotoPicker, setShowPhotoPicker] = useState(false)
 
   useEffect(() => {
     recipesApi.get(id)
@@ -70,6 +72,9 @@ export default function RecipeDetail() {
               All Recipes
             </Link>
             <div className="detail-actions">
+              <button onClick={() => setShowPhotoPicker(true)} className="btn btn-ghost">
+                {recipe.image_url ? 'Change photo' : 'Find photo'}
+              </button>
               <Link to={`/recipes/${id}/edit`} className="btn btn-ghost">Edit</Link>
               {confirmDelete ? (
                 <>
@@ -223,6 +228,14 @@ export default function RecipeDetail() {
           )}
         </div>
       </div>
+      {showPhotoPicker && (
+        <PhotoPicker
+          recipeId={id}
+          currentUrl={recipe.image_url}
+          onSelect={(updated) => { setRecipe(updated); setShowPhotoPicker(false) }}
+          onClose={() => setShowPhotoPicker(false)}
+        />
+      )}
     </Layout>
   )
 }

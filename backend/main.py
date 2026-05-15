@@ -277,6 +277,51 @@ def update_recipe(recipe_id: int, recipe: schemas.RecipeUpdate, db: Session = De
     return db_recipe
 
 
+@app.get("/api/recipes/{recipe_id}/image-options")
+async def get_image_options(
+    recipe_id: int,
+    q: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    recipe = db.query(models.Recipe).filter(models.Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    if not PEXELS_API_KEY:
+        raise HTTPException(status_code=500, detail="Pexels API key not configured")
+
+    query = q or recipe.title
+    resp = httpx.get(
+        "https://api.pexels.com/v1/search",
+        headers={"Authorization": PEXELS_API_KEY},
+        params={"query": f"{query} food", "per_page": 12, "orientation": "landscape"},
+        timeout=8,
+    )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Pexels API error")
+
+    return [
+        {
+            "id": p["id"],
+            "url": p["src"]["large2x"],
+            "thumb": p["src"]["medium"],
+            "photographer": p["photographer"],
+        }
+        for p in resp.json().get("photos", [])
+    ]
+
+
+@app.post("/api/recipes/{recipe_id}/image-url", response_model=schemas.RecipeOut)
+def set_image_url(recipe_id: int, body: dict, db: Session = Depends(get_db)):
+    recipe = db.query(models.Recipe).filter(models.Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    recipe.image_url = body.get("url")
+    recipe.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(recipe)
+    return recipe
+
+
 @app.delete("/api/recipes/{recipe_id}", status_code=204)
 def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
     db_recipe = db.query(models.Recipe).filter(models.Recipe.id == recipe_id).first()

@@ -27,11 +27,19 @@ export const recipesApi = {
   }).then(handleResponse),
   delete: (id) => fetch(`${BASE}/recipes/${id}`, { method: 'DELETE' }).then(handleResponse),
 
-  uploadImage: async (id, file) => {
-    const form = new FormData()
-    form.append('file', file)
-    return fetch(`${BASE}/recipes/${id}/image`, { method: 'POST', body: form }).then(handleResponse)
+  getImageOptions: (id, q) => {
+    const url = q
+      ? `${BASE}/recipes/${id}/image-options?q=${encodeURIComponent(q)}`
+      : `${BASE}/recipes/${id}/image-options`
+    return fetch(url).then(handleResponse)
   },
+
+  setImageUrl: (id, url) =>
+    fetch(`${BASE}/recipes/${id}/image-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    }).then(handleResponse),
 }
 
 export async function streamChat(messages, onChunk, onDone) {
