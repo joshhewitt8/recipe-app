@@ -87,7 +87,6 @@ class RecipeCreate(RecipeBase):
     ingredient_groups: List[IngredientGroupCreate] = []
     method_steps: List[MethodStepCreate] = []
     macros: Optional[MacrosCreate] = None
-    macros_overridden: bool = False
 
 
 class RecipeUpdate(RecipeCreate):

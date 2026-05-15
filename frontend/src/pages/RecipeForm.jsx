@@ -17,8 +17,6 @@ const emptyIngredient = () => ({
 })
 const emptyGroup = () => ({ name: '', order: 0, ingredients: [emptyIngredient()] })
 const emptyStep = () => ({ step_number: 1, title: '', description: '' })
-const emptyMacros = () => ({ calories: '', protein: '', carbs: '', fat: '' })
-
 const defaultForm = () => ({
   title: '',
   description: '',
@@ -28,8 +26,6 @@ const defaultForm = () => ({
   notes: '',
   ingredient_groups: [emptyGroup()],
   method_steps: [emptyStep()],
-  macros_overridden: false,
-  macros: emptyMacros(),
 })
 
 function toApiPayload(form) {
@@ -40,13 +36,7 @@ function toApiPayload(form) {
     prep_time: form.prep_time !== '' ? parseInt(form.prep_time) : null,
     cook_time: form.cook_time !== '' ? parseInt(form.cook_time) : null,
     notes: form.notes.trim() || null,
-    macros_overridden: form.macros_overridden,
-    macros: form.macros_overridden ? {
-      calories: form.macros.calories !== '' ? parseFloat(form.macros.calories) : null,
-      protein: form.macros.protein !== '' ? parseFloat(form.macros.protein) : null,
-      carbs: form.macros.carbs !== '' ? parseFloat(form.macros.carbs) : null,
-      fat: form.macros.fat !== '' ? parseFloat(form.macros.fat) : null,
-    } : null,
+    macros: null,
     ingredient_groups: form.ingredient_groups
       .filter((g) => g.name.trim())
       .map((g, i) => ({
@@ -83,11 +73,6 @@ function fromApiData(r) {
     prep_time: r.prep_time ?? '',
     cook_time: r.cook_time ?? '',
     notes: r.notes || '',
-    macros_overridden: false,
-    macros: r.macros
-      ? { calories: r.macros.calories ?? '', protein: r.macros.protein ?? '',
-          carbs: r.macros.carbs ?? '', fat: r.macros.fat ?? '' }
-      : emptyMacros(),
     ingredient_groups: r.ingredient_groups.length > 0
       ? r.ingredient_groups.map((g) => ({
           name: g.name, order: g.order,
@@ -119,8 +104,6 @@ function fromDesignData(r) {
     prep_time: r.prep_time || '',
     cook_time: r.cook_time || '',
     notes: r.notes || '',
-    macros_overridden: false,
-    macros: emptyMacros(),
     ingredient_groups: r.ingredient_groups?.length > 0
       ? r.ingredient_groups.map((g) => ({
           name: g.name || '', order: g.order || 0,
@@ -186,7 +169,6 @@ export default function RecipeForm() {
   }, [id, isEdit])
 
   const setField = (field, value) => setForm((f) => ({ ...f, [field]: value }))
-  const setMacro = (field, value) => setForm((f) => ({ ...f, macros: { ...f.macros, [field]: value } }))
 
   const addGroup = () => setForm((f) => ({ ...f, ingredient_groups: [...f.ingredient_groups, emptyGroup()] }))
   const removeGroup = (i) => setForm((f) => ({ ...f, ingredient_groups: f.ingredient_groups.filter((_, j) => j !== i) }))
@@ -365,7 +347,7 @@ export default function RecipeForm() {
                           onClick={() => removeIngredient(gi, ii)}
                           disabled={group.ingredients.length === 1}>×</button>
                       </div>
-                      {/* Prep note */}
+                      {/* Prep note + per-ingredient macro override */}
                       <div className="ing-prep-row">
                         <input
                           className="ing-prep-input"
@@ -374,11 +356,28 @@ export default function RecipeForm() {
                           onChange={(e) => setIngField(gi, ii, 'prep_note', e.target.value)}
                           placeholder="Preparation note, e.g. finely sliced, grated, diced (optional)"
                         />
-                        {ing.calories_per_100g != null && (
-                          <span className="macro-badge">
-                            {ing.calories_per_100g} kcal · {ing.protein_per_100g}g P · {ing.carbs_per_100g}g C · {ing.fat_per_100g}g F per 100g
-                          </span>
-                        )}
+                      </div>
+                      <div className="ing-macros-row">
+                        <span className="ing-macros-label">per 100g:</span>
+                        {[
+                          { field: 'calories_per_100g', label: 'kcal' },
+                          { field: 'protein_per_100g', label: 'P' },
+                          { field: 'carbs_per_100g', label: 'C' },
+                          { field: 'fat_per_100g', label: 'F' },
+                        ].map(({ field, label }) => (
+                          <label key={field} className="ing-macro-field">
+                            <input
+                              className="ing-macro-input"
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={ing[field] ?? ''}
+                              onChange={(e) => setIngField(gi, ii, field, e.target.value === '' ? null : parseFloat(e.target.value))}
+                              placeholder="—"
+                            />
+                            <span className="ing-macro-unit">{label}</span>
+                          </label>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -389,78 +388,18 @@ export default function RecipeForm() {
               </div>
             ))}
 
-            {/* Macros section */}
-            <div className="macros-form-section">
-              {liveMacros && !form.macros_overridden && (
-                <div className="live-macros-preview">
-                  <span className="live-macros-label">Estimated per serving</span>
-                  <div className="live-macros-values">
-                    <span><strong>{liveMacros.calories}</strong> kcal</span>
-                    <span><strong>{liveMacros.protein}g</strong> protein</span>
-                    <span><strong>{liveMacros.carbs}g</strong> carbs</span>
-                    <span><strong>{liveMacros.fat}g</strong> fat</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="macro-override-toggle"
-                    onClick={() => {
-                      setForm((f) => ({
-                        ...f,
-                        macros_overridden: true,
-                        macros: {
-                          calories: String(liveMacros.calories),
-                          protein: String(liveMacros.protein),
-                          carbs: String(liveMacros.carbs),
-                          fat: String(liveMacros.fat),
-                        },
-                      }))
-                    }}
-                  >
-                    Override manually
-                  </button>
+            {/* Live total preview */}
+            {liveMacros && (
+              <div className="live-macros-preview">
+                <span className="live-macros-label">Estimated per serving</span>
+                <div className="live-macros-values">
+                  <span><strong>{liveMacros.calories}</strong> kcal</span>
+                  <span><strong>{liveMacros.protein}g</strong> protein</span>
+                  <span><strong>{liveMacros.carbs}g</strong> carbs</span>
+                  <span><strong>{liveMacros.fat}g</strong> fat</span>
                 </div>
-              )}
-
-              {form.macros_overridden && (
-                <div className="macros-override-form">
-                  <div className="macros-override-header">
-                    <span className="macros-override-label">Manual macros per serving</span>
-                    <button
-                      type="button"
-                      className="macro-override-toggle"
-                      onClick={() => setField('macros_overridden', false)}
-                    >
-                      Use calculated
-                    </button>
-                  </div>
-                  <div className="macros-override-fields">
-                    {[
-                      { key: 'calories', label: 'Calories' },
-                      { key: 'protein', label: 'Protein (g)' },
-                      { key: 'carbs', label: 'Carbs (g)' },
-                      { key: 'fat', label: 'Fat (g)' },
-                    ].map(({ key, label }) => (
-                      <div key={key} className="field">
-                        <label className="field-label">{label}</label>
-                        <input className="field-input" type="number" min="0" step="0.1"
-                          value={form.macros[key]}
-                          onChange={(e) => setMacro(key, e.target.value)} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {!liveMacros && !form.macros_overridden && (
-                <button
-                  type="button"
-                  className="macro-override-toggle macro-override-toggle-standalone"
-                  onClick={() => setField('macros_overridden', true)}
-                >
-                  + Enter macros manually
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Method */}

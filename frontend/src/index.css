@@ -643,6 +643,30 @@ textarea { resize: vertical; }
 .ing-prep-input:focus { border-color: var(--border-focus); background: white; font-style: normal; }
 .ing-prep-input::placeholder { color: var(--text-faint); }
 
+.ing-macros-row {
+  display: flex; align-items: center; gap: 8px;
+  padding-left: calc(80px + 70px + 16px);
+  margin-top: 4px; flex-wrap: wrap;
+}
+.ing-macros-label {
+  font-size: 11px; color: var(--text-faint); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.4px; flex-shrink: 0;
+}
+.ing-macro-field {
+  display: flex; align-items: center; gap: 3px;
+}
+.ing-macro-input {
+  width: 58px; padding: 3px 6px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 12px; text-align: right; background: white; outline: none;
+  color: var(--green); font-weight: 600;
+}
+.ing-macro-input:focus { border-color: var(--border-focus); }
+.ing-macro-input::placeholder { color: var(--text-faint); font-weight: 400; }
+.ing-macro-unit {
+  font-size: 11px; color: var(--text-faint); font-weight: 600;
+}
+
 /* ── Macro override ── */
 .macros-form-section { margin-top: 16px; }
 

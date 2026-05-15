@@ -279,14 +279,7 @@ def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _resolve_macros(recipe: schemas.RecipeCreate) -> dict:
-    """Use manually overridden macros if provided, otherwise calculate from ingredients."""
-    if recipe.macros_overridden and recipe.macros:
-        return {
-            "calories": recipe.macros.calories or 0,
-            "protein": recipe.macros.protein or 0,
-            "carbs": recipe.macros.carbs or 0,
-            "fat": recipe.macros.fat or 0,
-        }
+    """Calculate macros from per-ingredient nutritional data (per 100g), divided by servings."""
     totals = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}
     servings = max(recipe.servings or 1, 1)
     for group in recipe.ingredient_groups:
