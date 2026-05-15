@@ -1,6 +1,8 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 export default function Layout({ children }) {
+  const { pathname } = useLocation()
+
   return (
     <div className="layout">
       <header className="header">
@@ -11,9 +13,14 @@ export default function Layout({ children }) {
             </svg>
             Recipes
           </Link>
-          <Link to="/new" className="btn btn-primary" style={{ fontSize: 13 }}>
-            + New Recipe
-          </Link>
+          <nav className="header-nav">
+            <Link to="/design" className={`nav-link ${pathname === '/design' ? 'nav-link-active' : ''}`}>
+              Design with Claude
+            </Link>
+            <Link to="/new" className="btn btn-primary" style={{ fontSize: 13 }}>
+              + New Recipe
+            </Link>
+          </nav>
         </div>
       </header>
       <main className="main-content">{children}</main>

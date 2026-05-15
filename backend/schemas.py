@@ -79,6 +79,7 @@ class RecipeBase(BaseModel):
     prep_time: Optional[int] = None
     cook_time: Optional[int] = None
     notes: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class RecipeCreate(RecipeBase):

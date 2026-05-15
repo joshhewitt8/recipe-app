@@ -14,6 +14,7 @@ class Recipe(Base):
     prep_time = Column(Integer)
     cook_time = Column(Integer)
     notes = Column(Text)
+    image_url = Column(String(512))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

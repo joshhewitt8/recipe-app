@@ -13,7 +13,11 @@ export default function RecipeCard({ recipe }) {
 
   return (
     <Link to={`/recipes/${recipe.id}`} className="recipe-card">
-      <div className="recipe-card-accent" />
+      {recipe.image_url ? (
+        <div className="recipe-card-img" style={{ backgroundImage: `url(${recipe.image_url})` }} />
+      ) : (
+        <div className="recipe-card-img recipe-card-img-placeholder" />
+      )}
       <div className="recipe-card-body">
         <h3 className="recipe-card-title">{recipe.title}</h3>
         {recipe.description && (

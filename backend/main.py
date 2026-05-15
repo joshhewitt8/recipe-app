@@ -1,10 +1,13 @@
 import os
+import json
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 import httpx
+import anthropic
 
 import models
 import schemas
@@ -25,12 +28,78 @@ app.add_middleware(
 USDA_API_KEY = os.getenv("USDA_API_KEY", "")
 USDA_BASE = "https://api.nal.usda.gov/fdc/v1"
 
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
+
+SYSTEM_PROMPT = """You are an expert recipe designer and culinary collaborator. Help users design detailed, well-crafted recipes through conversation.
+
+Your approach:
+- Ask about dietary preferences, skill level, occasion, and available ingredients if not specified
+- Be specific with quantities — always use grams (g) or millilitres (ml) for measurable ingredients
+- Consider flavour balance, texture, and cooking technique
+- Group ingredients logically (e.g. Marinade, Sauce, Main, Garnish)
+
+When you have enough information to write a complete recipe — or when the user asks for it — include it as a JSON code block in EXACTLY this format:
+
+```json
+{
+  "recipe": {
+    "title": "Recipe Title",
+    "description": "A brief appetising description",
+    "servings": 4,
+    "prep_time": 20,
+    "cook_time": 30,
+    "notes": "Tips, storage, or variations",
+    "ingredient_groups": [
+      {
+        "name": "Group Name",
+        "order": 0,
+        "ingredients": [
+          {"name": "Ingredient", "amount": 500, "unit": "g"}
+        ]
+      }
+    ],
+    "method_steps": [
+      {"step_number": 1, "title": "Optional title", "description": "Detailed instruction"}
+    ]
+  }
+}
+```
+
+After outputting the recipe, ask if they would like any adjustments."""
+
+
+# ── Claude recipe design ───────────────────────────────────────────────────────
+
+class ChatRequest(schemas.BaseModel):
+    messages: List[dict]
+
+
+@app.post("/api/design/chat")
+async def design_chat(request: ChatRequest):
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="Anthropic API key not configured")
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    def generate():
+        with client.messages.stream(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
+            system=SYSTEM_PROMPT,
+            messages=request.messages,
+        ) as stream:
+            for text in stream.text_stream:
+                yield f"data: {json.dumps({'text': text})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
 
 # ── Ingredient search ──────────────────────────────────────────────────────────
 
 @app.get("/api/ingredients/search")
 async def search_ingredients(q: str = Query(..., min_length=2)):
-    """Search USDA FoodData Central and return matching ingredients with macros."""
     if not USDA_API_KEY:
         raise HTTPException(status_code=500, detail="USDA API key not configured")
 
@@ -48,10 +117,8 @@ async def search_ingredients(q: str = Query(..., min_length=2)):
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail="USDA API error")
 
-    data = resp.json()
     results = []
-
-    for food in data.get("foods", []):
+    for food in resp.json().get("foods", []):
         nutrients = {n["nutrientName"]: n.get("value", 0) for n in food.get("foodNutrients", [])}
         results.append({
             "fdcId": food["fdcId"],
@@ -61,17 +128,13 @@ async def search_ingredients(q: str = Query(..., min_length=2)):
             "carbs": round(nutrients.get("Carbohydrate, by difference", 0), 1),
             "fat": round(nutrients.get("Total lipid (fat)", 0), 1),
         })
-
     return results
 
 
 # ── Recipes ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/recipes", response_model=List[schemas.RecipeSummaryOut])
-def list_recipes(
-    search: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-):
+def list_recipes(search: Optional[str] = Query(None), db: Session = Depends(get_db)):
     query = db.query(models.Recipe)
     if search:
         query = query.filter(models.Recipe.title.ilike(f"%{search}%"))
@@ -92,44 +155,32 @@ def create_recipe(recipe: schemas.RecipeCreate, db: Session = Depends(get_db)):
     db.flush()
 
     for group_data in recipe.ingredient_groups:
-        db_group = models.IngredientGroup(
-            recipe_id=db_recipe.id,
-            name=group_data.name,
-            order=group_data.order,
-        )
+        db_group = models.IngredientGroup(recipe_id=db_recipe.id, name=group_data.name, order=group_data.order)
         db.add(db_group)
         db.flush()
         for ing in group_data.ingredients:
             db.add(models.Ingredient(
-                group_id=db_group.id,
-                name=ing.name,
-                amount=ing.amount,
-                unit=ing.unit,
-                calories_per_100g=ing.calories_per_100g,
-                protein_per_100g=ing.protein_per_100g,
-                carbs_per_100g=ing.carbs_per_100g,
-                fat_per_100g=ing.fat_per_100g,
+                group_id=db_group.id, name=ing.name, amount=ing.amount, unit=ing.unit,
+                calories_per_100g=ing.calories_per_100g, protein_per_100g=ing.protein_per_100g,
+                carbs_per_100g=ing.carbs_per_100g, fat_per_100g=ing.fat_per_100g,
             ))
 
     for step in recipe.method_steps:
         db.add(models.MethodStep(
-            recipe_id=db_recipe.id,
-            step_number=step.step_number,
-            title=step.title,
-            description=step.description,
+            recipe_id=db_recipe.id, step_number=step.step_number,
+            title=step.title, description=step.description,
         ))
 
     macros = _calculate_macros(recipe)
-    db.add(models.Macros(
-        recipe_id=db_recipe.id,
-        calories=macros["calories"],
-        protein=macros["protein"],
-        carbs=macros["carbs"],
-        fat=macros["fat"],
-    ))
+    db.add(models.Macros(recipe_id=db_recipe.id, **macros))
 
     db.commit()
     db.refresh(db_recipe)
+
+    # Fetch image in background after commit
+    import threading
+    threading.Thread(target=_attach_pexels_image, args=(db_recipe.id, recipe.title), daemon=True).start()
+
     return db_recipe
 
 
@@ -142,11 +193,7 @@ def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/api/recipes/{recipe_id}", response_model=schemas.RecipeOut)
-def update_recipe(
-    recipe_id: int,
-    recipe: schemas.RecipeUpdate,
-    db: Session = Depends(get_db),
-):
+def update_recipe(recipe_id: int, recipe: schemas.RecipeUpdate, db: Session = Depends(get_db)):
     db_recipe = db.query(models.Recipe).filter(models.Recipe.id == recipe_id).first()
     if not db_recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
@@ -168,41 +215,29 @@ def update_recipe(
     db.flush()
 
     for group_data in recipe.ingredient_groups:
-        db_group = models.IngredientGroup(
-            recipe_id=db_recipe.id,
-            name=group_data.name,
-            order=group_data.order,
-        )
+        db_group = models.IngredientGroup(recipe_id=db_recipe.id, name=group_data.name, order=group_data.order)
         db.add(db_group)
         db.flush()
         for ing in group_data.ingredients:
             db.add(models.Ingredient(
-                group_id=db_group.id,
-                name=ing.name,
-                amount=ing.amount,
-                unit=ing.unit,
-                calories_per_100g=ing.calories_per_100g,
-                protein_per_100g=ing.protein_per_100g,
-                carbs_per_100g=ing.carbs_per_100g,
-                fat_per_100g=ing.fat_per_100g,
+                group_id=db_group.id, name=ing.name, amount=ing.amount, unit=ing.unit,
+                calories_per_100g=ing.calories_per_100g, protein_per_100g=ing.protein_per_100g,
+                carbs_per_100g=ing.carbs_per_100g, fat_per_100g=ing.fat_per_100g,
             ))
 
     for step in recipe.method_steps:
         db.add(models.MethodStep(
-            recipe_id=db_recipe.id,
-            step_number=step.step_number,
-            title=step.title,
-            description=step.description,
+            recipe_id=db_recipe.id, step_number=step.step_number,
+            title=step.title, description=step.description,
         ))
 
     macros = _calculate_macros(recipe)
-    db.add(models.Macros(
-        recipe_id=db_recipe.id,
-        calories=macros["calories"],
-        protein=macros["protein"],
-        carbs=macros["carbs"],
-        fat=macros["fat"],
-    ))
+    db.add(models.Macros(recipe_id=db_recipe.id, **macros))
+
+    # Refresh image if title changed
+    if not db_recipe.image_url:
+        import threading
+        threading.Thread(target=_attach_pexels_image, args=(db_recipe.id, recipe.title), daemon=True).start()
 
     db.commit()
     db.refresh(db_recipe)
@@ -221,17 +256,41 @@ def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _calculate_macros(recipe: schemas.RecipeCreate) -> dict:
-    """Sum macros across all ingredients (assuming amounts are in grams) and divide by servings."""
     totals = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}
     servings = max(recipe.servings or 1, 1)
-
     for group in recipe.ingredient_groups:
         for ing in group.ingredients:
             if ing.amount and ing.calories_per_100g is not None:
-                factor = ing.amount / 100
-                totals["calories"] += (ing.calories_per_100g or 0) * factor
-                totals["protein"] += (ing.protein_per_100g or 0) * factor
-                totals["carbs"] += (ing.carbs_per_100g or 0) * factor
-                totals["fat"] += (ing.fat_per_100g or 0) * factor
-
+                f = ing.amount / 100
+                totals["calories"] += (ing.calories_per_100g or 0) * f
+                totals["protein"] += (ing.protein_per_100g or 0) * f
+                totals["carbs"] += (ing.carbs_per_100g or 0) * f
+                totals["fat"] += (ing.fat_per_100g or 0) * f
     return {k: round(v / servings, 1) for k, v in totals.items()}
+
+
+def _attach_pexels_image(recipe_id: int, title: str):
+    """Fetch a Pexels food photo for the recipe title and store the URL."""
+    if not PEXELS_API_KEY:
+        return
+    try:
+        resp = httpx.get(
+            "https://api.pexels.com/v1/search",
+            headers={"Authorization": PEXELS_API_KEY},
+            params={"query": f"{title} food", "per_page": 1, "orientation": "landscape"},
+            timeout=8,
+        )
+        if resp.status_code == 200:
+            photos = resp.json().get("photos", [])
+            if photos:
+                url = photos[0]["src"]["large2x"]
+                db = next(get_db())
+                try:
+                    r = db.query(models.Recipe).filter(models.Recipe.id == recipe_id).first()
+                    if r:
+                        r.image_url = url
+                        db.commit()
+                finally:
+                    db.close()
+    except Exception:
+        pass

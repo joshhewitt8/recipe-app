@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import IngredientAutocomplete from '../components/IngredientAutocomplete'
 import { recipesApi } from '../api/recipes'
@@ -60,6 +60,41 @@ function toApiPayload(form) {
         description: s.description.trim(),
       })),
     macros: null, // calculated server-side from ingredients
+  }
+}
+
+function fromDesignData(r) {
+  return {
+    title: r.title || '',
+    description: r.description || '',
+    servings: r.servings || 4,
+    prep_time: r.prep_time || '',
+    cook_time: r.cook_time || '',
+    notes: r.notes || '',
+    ingredient_groups: r.ingredient_groups?.length > 0
+      ? r.ingredient_groups.map((g) => ({
+          name: g.name || '',
+          order: g.order || 0,
+          ingredients: g.ingredients?.length > 0
+            ? g.ingredients.map((ing) => ({
+                name: ing.name || '',
+                amount: String(ing.amount || ''),
+                unit: ing.unit || 'g',
+                calories_per_100g: null,
+                protein_per_100g: null,
+                carbs_per_100g: null,
+                fat_per_100g: null,
+              }))
+            : [emptyIngredient()],
+        }))
+      : [emptyGroup()],
+    method_steps: r.method_steps?.length > 0
+      ? r.method_steps.map((s) => ({
+          step_number: s.step_number || 1,
+          title: s.title || '',
+          description: s.description || '',
+        }))
+      : [emptyStep()],
   }
 }
 
@@ -127,6 +162,7 @@ function calcLiveMacros(form) {
 export default function RecipeForm() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const isEdit = !!id
 
   const [form, setForm] = useState(defaultForm())
@@ -135,6 +171,11 @@ export default function RecipeForm() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    // Pre-fill from Claude design page
+    if (!isEdit && location.state?.recipe) {
+      setForm(fromDesignData(location.state.recipe))
+      return
+    }
     if (!isEdit) return
     recipesApi.get(id)
       .then((data) => setForm(fromApiData(data)))

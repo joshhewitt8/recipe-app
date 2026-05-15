@@ -11,28 +11,59 @@ async function handleResponse(res) {
 
 export const recipesApi = {
   list: (search) => {
-    const url = search
-      ? `${BASE}/recipes?search=${encodeURIComponent(search)}`
-      : `${BASE}/recipes`
+    const url = search ? `${BASE}/recipes?search=${encodeURIComponent(search)}` : `${BASE}/recipes`
     return fetch(url).then(handleResponse)
   },
-
   get: (id) => fetch(`${BASE}/recipes/${id}`).then(handleResponse),
+  create: (data) => fetch(`${BASE}/recipes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(handleResponse),
+  update: (id, data) => fetch(`${BASE}/recipes/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(handleResponse),
+  delete: (id) => fetch(`${BASE}/recipes/${id}`, { method: 'DELETE' }).then(handleResponse),
 
-  create: (data) =>
-    fetch(`${BASE}/recipes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+  uploadImage: async (id, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`${BASE}/recipes/${id}/image`, { method: 'POST', body: form }).then(handleResponse)
+  },
+}
 
-  update: (id, data) =>
-    fetch(`${BASE}/recipes/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+export async function streamChat(messages, onChunk, onDone) {
+  const res = await fetch(`${BASE}/design/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Chat failed' }))
+    throw new Error(err.detail || 'Chat failed')
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullText = ''
 
-  delete: (id) =>
-    fetch(`${BASE}/recipes/${id}`, { method: 'DELETE' }).then(handleResponse),
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop()
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const data = line.slice(6).trim()
+      if (data === '[DONE]') continue
+      try {
+        const { text } = JSON.parse(data)
+        if (text) { fullText += text; onChunk(fullText) }
+      } catch {}
+    }
+  }
+  onDone(fullText)
 }

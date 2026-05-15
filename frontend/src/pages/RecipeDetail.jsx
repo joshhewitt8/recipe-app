@@ -57,7 +57,10 @@ export default function RecipeDetail() {
   return (
     <Layout>
       {/* Dark hero */}
-      <div className="detail-hero">
+      <div className="detail-hero" style={recipe.image_url ? { minHeight: 260 } : {}}>
+        {recipe.image_url && (
+          <div className="detail-hero-image" style={{ backgroundImage: `url(${recipe.image_url})` }} />
+        )}
         <div className="detail-hero-inner">
           <div className="detail-topbar">
             <Link to="/" className="back-link" style={{ color: 'rgba(255,255,255,0.6)' }}>
