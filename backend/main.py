@@ -12,8 +12,29 @@ import anthropic
 import models
 import schemas
 from database import engine, get_db
+from sqlalchemy import text, inspect as sa_inspect
 
 models.Base.metadata.create_all(bind=engine)
+
+
+def _migrate():
+    """Safely add any columns introduced after initial deployment."""
+    with engine.connect() as conn:
+        insp = sa_inspect(engine)
+
+        recipe_cols = {c["name"] for c in insp.get_columns("recipes")}
+        if "image_url" not in recipe_cols:
+            conn.execute(text("ALTER TABLE recipes ADD COLUMN image_url VARCHAR(512)"))
+
+        ing_cols = {c["name"] for c in insp.get_columns("ingredients")}
+        for col in ["calories_per_100g", "protein_per_100g", "carbs_per_100g", "fat_per_100g"]:
+            if col not in ing_cols:
+                conn.execute(text(f"ALTER TABLE ingredients ADD COLUMN {col} FLOAT"))
+
+        conn.commit()
+
+
+_migrate()
 
 app = FastAPI(title="Recipe API", version="1.0.0")
 
