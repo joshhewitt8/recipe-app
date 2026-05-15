@@ -30,6 +30,8 @@ def _migrate():
         for col in ["calories_per_100g", "protein_per_100g", "carbs_per_100g", "fat_per_100g"]:
             if col not in ing_cols:
                 conn.execute(text(f"ALTER TABLE ingredients ADD COLUMN {col} FLOAT"))
+        if "prep_note" not in ing_cols:
+            conn.execute(text("ALTER TABLE ingredients ADD COLUMN prep_note VARCHAR(255)"))
 
         conn.commit()
 
@@ -181,7 +183,8 @@ def create_recipe(recipe: schemas.RecipeCreate, db: Session = Depends(get_db)):
         db.flush()
         for ing in group_data.ingredients:
             db.add(models.Ingredient(
-                group_id=db_group.id, name=ing.name, amount=ing.amount, unit=ing.unit,
+                group_id=db_group.id, name=ing.name, prep_note=ing.prep_note,
+                amount=ing.amount, unit=ing.unit,
                 calories_per_100g=ing.calories_per_100g, protein_per_100g=ing.protein_per_100g,
                 carbs_per_100g=ing.carbs_per_100g, fat_per_100g=ing.fat_per_100g,
             ))
@@ -192,13 +195,12 @@ def create_recipe(recipe: schemas.RecipeCreate, db: Session = Depends(get_db)):
             title=step.title, description=step.description,
         ))
 
-    macros = _calculate_macros(recipe)
+    macros = _resolve_macros(recipe)
     db.add(models.Macros(recipe_id=db_recipe.id, **macros))
 
     db.commit()
     db.refresh(db_recipe)
 
-    # Fetch image in background after commit
     import threading
     threading.Thread(target=_attach_pexels_image, args=(db_recipe.id, recipe.title), daemon=True).start()
 
@@ -241,7 +243,8 @@ def update_recipe(recipe_id: int, recipe: schemas.RecipeUpdate, db: Session = De
         db.flush()
         for ing in group_data.ingredients:
             db.add(models.Ingredient(
-                group_id=db_group.id, name=ing.name, amount=ing.amount, unit=ing.unit,
+                group_id=db_group.id, name=ing.name, prep_note=ing.prep_note,
+                amount=ing.amount, unit=ing.unit,
                 calories_per_100g=ing.calories_per_100g, protein_per_100g=ing.protein_per_100g,
                 carbs_per_100g=ing.carbs_per_100g, fat_per_100g=ing.fat_per_100g,
             ))
@@ -252,10 +255,9 @@ def update_recipe(recipe_id: int, recipe: schemas.RecipeUpdate, db: Session = De
             title=step.title, description=step.description,
         ))
 
-    macros = _calculate_macros(recipe)
+    macros = _resolve_macros(recipe)
     db.add(models.Macros(recipe_id=db_recipe.id, **macros))
 
-    # Refresh image if title changed
     if not db_recipe.image_url:
         import threading
         threading.Thread(target=_attach_pexels_image, args=(db_recipe.id, recipe.title), daemon=True).start()
@@ -276,7 +278,15 @@ def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _calculate_macros(recipe: schemas.RecipeCreate) -> dict:
+def _resolve_macros(recipe: schemas.RecipeCreate) -> dict:
+    """Use manually overridden macros if provided, otherwise calculate from ingredients."""
+    if recipe.macros_overridden and recipe.macros:
+        return {
+            "calories": recipe.macros.calories or 0,
+            "protein": recipe.macros.protein or 0,
+            "carbs": recipe.macros.carbs or 0,
+            "fat": recipe.macros.fat or 0,
+        }
     totals = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}
     servings = max(recipe.servings or 1, 1)
     for group in recipe.ingredient_groups:

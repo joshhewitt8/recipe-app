@@ -5,6 +5,7 @@ from datetime import datetime
 
 class IngredientBase(BaseModel):
     name: str
+    prep_note: Optional[str] = None
     amount: float
     unit: Optional[str] = None
     calories_per_100g: Optional[float] = None
@@ -86,6 +87,7 @@ class RecipeCreate(RecipeBase):
     ingredient_groups: List[IngredientGroupCreate] = []
     method_steps: List[MethodStepCreate] = []
     macros: Optional[MacrosCreate] = None
+    macros_overridden: bool = False
 
 
 class RecipeUpdate(RecipeCreate):

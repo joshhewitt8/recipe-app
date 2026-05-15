@@ -507,7 +507,7 @@ textarea { resize: vertical; }
 .ing-rows { margin-bottom: 10px; }
 .ing-row-header {
   display: grid;
-  grid-template-columns: 80px 70px 1fr 160px 32px;
+  grid-template-columns: 80px 70px 1fr 32px;
   gap: 8px; padding: 0 4px 6px;
 }
 .ing-row-header span {
@@ -516,8 +516,8 @@ textarea { resize: vertical; }
 }
 .ing-row {
   display: grid;
-  grid-template-columns: 80px 70px 1fr 160px 32px;
-  gap: 8px; margin-bottom: 8px; align-items: center;
+  grid-template-columns: 80px 70px 1fr 32px;
+  gap: 8px; align-items: center;
 }
 .ing-input {
   padding: 8px 10px; border: 1px solid var(--border);
@@ -622,6 +622,70 @@ textarea { resize: vertical; }
   .recipe-grid { grid-template-columns: 1fr; }
   .field-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Ingredient prep notes ── */
+.ing-name-block { display: flex; flex-direction: column; gap: 1px; }
+.ing-prep-note { font-size: 12px; color: var(--text-faint); font-style: italic; }
+
+.ing-row-wrap { margin-bottom: 10px; }
+.ing-prep-row {
+  display: flex; align-items: center; gap: 10px;
+  padding-left: calc(80px + 70px + 16px); /* offset past amount + unit columns */
+  margin-top: 4px;
+}
+.ing-prep-input {
+  flex: 1; padding: 5px 10px;
+  border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  font-size: 12px; font-style: italic; color: var(--text-muted);
+  background: transparent; outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ing-prep-input:focus { border-color: var(--border-focus); background: white; font-style: normal; }
+.ing-prep-input::placeholder { color: var(--text-faint); }
+
+/* ── Macro override ── */
+.macros-form-section { margin-top: 16px; }
+
+.macro-override-toggle {
+  background: none; border: none; font-size: 13px; font-weight: 500;
+  color: var(--text-muted); cursor: pointer; padding: 0; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.macro-override-toggle:hover { color: var(--green); }
+.macro-override-toggle-standalone {
+  display: block; margin-top: 8px; color: var(--green); text-decoration: none;
+}
+.macro-override-toggle-standalone:hover { text-decoration: underline; }
+
+.macros-override-form {
+  background: #FFFBF0; border: 1px solid #FDE68A;
+  border-radius: var(--radius); padding: 16px;
+}
+.macros-override-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+}
+.macros-override-label {
+  font-size: 13px; font-weight: 600; color: var(--text-muted);
+}
+.macros-override-fields {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+}
+
+/* Keep live preview consistent */
+.live-macros-preview {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  background: var(--green-light); border: 1px solid var(--green-border);
+  border-radius: var(--radius); padding: 12px 16px;
+}
+.live-macros-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--green); flex-shrink: 0;
+}
+.live-macros-values {
+  display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px;
+  color: var(--text-muted); flex: 1;
+}
+.live-macros-values strong { color: var(--green); }
 
 /* ── Header nav ── */
 .header-nav { display: flex; align-items: center; gap: 12px; }

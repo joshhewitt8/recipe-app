@@ -60,6 +60,7 @@ class Ingredient(Base):
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey("ingredient_groups.id"), nullable=False)
     name = Column(String(255), nullable=False)
+    prep_note = Column(String(255))
     amount = Column(Float, nullable=False)
     unit = Column(String(50))
     calories_per_100g = Column(Float)

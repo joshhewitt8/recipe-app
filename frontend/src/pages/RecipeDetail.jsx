@@ -133,7 +133,10 @@ export default function RecipeDetail() {
                         <span className="ing-amount">
                           {formatAmount(ing.amount * scaleFactor)}{ing.unit ? ` ${ing.unit}` : ''}
                         </span>
-                        <span className="ing-name">{ing.name}</span>
+                        <span className="ing-name-block">
+                          <span className="ing-name">{ing.name}</span>
+                          {ing.prep_note && <span className="ing-prep-note">{ing.prep_note}</span>}
+                        </span>
                       </li>
                     ))}
                   </ul>
