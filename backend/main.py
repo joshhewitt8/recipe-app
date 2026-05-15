@@ -285,11 +285,34 @@ UNIT_TO_GRAMS = {
     "oz": 28.35, "lb": 453.6,
 }
 
+DENSITIES = {
+    "soy sauce": 1.15, "tamari": 1.15, "fish sauce": 1.07,
+    "oyster sauce": 1.28, "worcestershire": 1.07, "hoisin": 1.32,
+    "black bean sauce": 1.20, "mirin": 1.09,
+    "gochujang": 1.45, "harissa": 1.10, "sriracha": 1.10,
+    "hot sauce": 1.05, "chilli sauce": 1.10, "sweet chilli": 1.12, "sambal": 1.10,
+    "tomato paste": 1.08, "tomato puree": 1.06, "ketchup": 1.15,
+    "tahini": 1.07, "peanut butter": 1.08, "almond butter": 1.06, "miso": 1.18,
+    "mustard": 1.09, "mayonnaise": 0.91,
+    "honey": 1.40, "maple syrup": 1.32, "golden syrup": 1.43,
+    "agave": 1.35, "molasses": 1.40, "treacle": 1.40,
+    "olive oil": 0.91, "vegetable oil": 0.92, "sunflower oil": 0.92,
+    "sesame oil": 0.92, "coconut oil": 0.92, "groundnut oil": 0.92,
+    "balsamic": 1.32, "rice vinegar": 1.01, "cider vinegar": 1.01, "wine vinegar": 1.01,
+    "cream": 1.01, "double cream": 1.01, "sour cream": 1.00,
+    "creme fraiche": 0.98, "greek yogurt": 1.04, "yogurt": 1.04,
+    "coconut milk": 1.04, "coconut cream": 1.08, "sake": 0.97,
+}
 
-def _unit_to_grams(unit: str) -> float:
-    if not unit:
-        return 1.0
-    return UNIT_TO_GRAMS.get(unit.lower().strip(), 1.0)
+
+def _unit_to_grams(unit: str, ingredient_name: str = "") -> float:
+    base = UNIT_TO_GRAMS.get((unit or "").lower().strip(), 1.0)
+    if ingredient_name:
+        name = ingredient_name.lower()
+        for key, density in DENSITIES.items():
+            if key in name:
+                return base * density
+    return base
 
 
 def _resolve_macros(recipe: schemas.RecipeCreate) -> dict:
@@ -299,7 +322,7 @@ def _resolve_macros(recipe: schemas.RecipeCreate) -> dict:
     for group in recipe.ingredient_groups:
         for ing in group.ingredients:
             if ing.amount and ing.calories_per_100g is not None:
-                grams = ing.amount * _unit_to_grams(ing.unit)
+                grams = ing.amount * _unit_to_grams(ing.unit, ing.name)
                 f = grams / 100
                 totals["calories"] += (ing.calories_per_100g or 0) * f
                 totals["protein"] += (ing.protein_per_100g or 0) * f

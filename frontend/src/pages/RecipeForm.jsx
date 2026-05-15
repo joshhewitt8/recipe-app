@@ -129,7 +129,7 @@ function calcLiveMacros(form) {
     for (const ing of g.ingredients) {
       const amt = parseFloat(ing.amount)
       if (!amt || ing.calories_per_100g == null) continue
-      const grams = amt * unitToGrams(ing.unit)
+      const grams = amt * unitToGrams(ing.unit, ing.name)
       const f = grams / 100
       cal += (ing.calories_per_100g || 0) * f
       pro += (ing.protein_per_100g || 0) * f
