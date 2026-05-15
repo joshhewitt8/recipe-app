@@ -278,14 +278,29 @@ def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+UNIT_TO_GRAMS = {
+    "g": 1, "kg": 1000, "mg": 0.001,
+    "ml": 1, "l": 1000,
+    "tsp": 5, "tbsp": 15, "cup": 240,
+    "oz": 28.35, "lb": 453.6,
+}
+
+
+def _unit_to_grams(unit: str) -> float:
+    if not unit:
+        return 1.0
+    return UNIT_TO_GRAMS.get(unit.lower().strip(), 1.0)
+
+
 def _resolve_macros(recipe: schemas.RecipeCreate) -> dict:
-    """Calculate macros from per-ingredient nutritional data (per 100g), divided by servings."""
+    """Calculate macros from per-ingredient nutritional data, converting units to grams first."""
     totals = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}
     servings = max(recipe.servings or 1, 1)
     for group in recipe.ingredient_groups:
         for ing in group.ingredients:
             if ing.amount and ing.calories_per_100g is not None:
-                f = ing.amount / 100
+                grams = ing.amount * _unit_to_grams(ing.unit)
+                f = grams / 100
                 totals["calories"] += (ing.calories_per_100g or 0) * f
                 totals["protein"] += (ing.protein_per_100g or 0) * f
                 totals["carbs"] += (ing.carbs_per_100g or 0) * f

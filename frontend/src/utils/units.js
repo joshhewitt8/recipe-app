@@ -1,3 +1,22 @@
+// Standard unit → grams conversion factors
+export const UNIT_TO_GRAMS = {
+  g: 1,
+  kg: 1000,
+  mg: 0.001,
+  ml: 1,
+  l: 1000,
+  tsp: 5,
+  tbsp: 15,
+  cup: 240,
+  oz: 28.35,
+  lb: 453.6,
+}
+
+export function unitToGrams(unit) {
+  if (!unit) return 1
+  return UNIT_TO_GRAMS[unit.toLowerCase().trim()] ?? 1
+}
+
 const ML_KEYWORDS = [
   'water', 'stock', 'broth', 'milk', 'cream', 'coconut milk', 'juice',
   'wine', 'beer', 'lager', 'ale', 'cider', 'spirits', 'rum', 'vodka',

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import IngredientAutocomplete from '../components/IngredientAutocomplete'
 import { recipesApi } from '../api/recipes'
-import { suggestUnit } from '../utils/units'
+import { suggestUnit, unitToGrams } from '../utils/units'
 
 const emptyIngredient = () => ({
   name: '',
@@ -129,7 +129,8 @@ function calcLiveMacros(form) {
     for (const ing of g.ingredients) {
       const amt = parseFloat(ing.amount)
       if (!amt || ing.calories_per_100g == null) continue
-      const f = amt / 100
+      const grams = amt * unitToGrams(ing.unit)
+      const f = grams / 100
       cal += (ing.calories_per_100g || 0) * f
       pro += (ing.protein_per_100g || 0) * f
       carb += (ing.carbs_per_100g || 0) * f
